@@ -22,7 +22,7 @@ df.columns = df.columns.astype(str)
 
 
 example_signal = df.iloc[0, :-1].astype(float).values  
-label = df.iloc[0, -1]  # 'MI' or not
+label = df.iloc[0, -1]  
 
 # On fit un modèle d'auto régression d'ordre 10 
 p = 10
@@ -130,7 +130,6 @@ grid.fit(X_train, y_train)
 
 # Meilleur modèle
 best_svm = grid.best_estimator_
-print("Meilleur C trouvé :", grid.best_params_)
 
 # Évaluation
 y_pred = best_svm.predict(X_test)
