@@ -1,0 +1,140 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Fri May 16 16:00:30 2025
+
+@author: mariehoffmann
+"""
+
+import pandas as pd
+import numpy as np
+from statsmodels.tsa.ar_model import AutoReg
+from sklearn.model_selection import train_test_split
+from sklearn.svm import SVC
+from sklearn.metrics import confusion_matrix, accuracy_score, classification_report
+from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# --- Chargement des données ---
+file_path = "/Users/mariehoffmann/Desktop/Esme/Ingé2/Projet/PPG_Dataset.csv"
+df = pd.read_csv(file_path)
+
+# --- Fonctions SNR ---
+def calculate_snr_fft(signal):
+    freq_signal = np.fft.fft(signal)
+    signal_power = np.sum(np.abs(freq_signal[:len(freq_signal)//2])**2)
+    noise_power = np.sum(np.abs(freq_signal[len(freq_signal)//2:])**2)
+    snr = 10 * np.log10(signal_power / noise_power) if noise_power != 0 else np.inf
+    return snr
+
+def calculate_snr_ar(signal, lags=20):
+    try:
+        model = AutoReg(signal, lags=lags)
+        model_fitted = model.fit()
+        predicted_signal = model_fitted.predict(start=lags, end=len(signal)-1)
+        noise = signal[lags:] - predicted_signal
+        signal_power = np.mean(signal[lags:]**2)
+        noise_power = np.mean(noise**2)
+        snr = 10 * np.log10(signal_power / noise_power) if noise_power != 0 else np.inf
+    except Exception:
+        snr = 0
+    return snr
+
+# --- Calcul SNR pour chaque signal ---
+snr_values = []
+for i, row in df.iterrows():
+    ppg_signal = row.drop('Label').to_numpy()
+    snr_fft = calculate_snr_fft(ppg_signal)
+    snr_ar = calculate_snr_ar(ppg_signal)
+    snr_values.append((row['Label'], i, snr_fft, snr_ar))
+
+snr_df = pd.DataFrame(snr_values, columns=['Type', 'Personne', 'SNR_FFT', 'SNR_AR'])
+
+# --- Fonction d'entraînement et d’évaluation ---
+def evaluate_snr_model(snr_column, label):
+    X = snr_df[[snr_column]].values
+    y = snr_df['Type'].values
+
+    # Standardisation
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    # Ajout dans snr_df pour interprétation ultérieure
+    snr_df[f'{snr_column}_scaled'] = X_scaled
+
+    # Split
+    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.3, random_state=42)
+
+    # SVM
+    model = SVC(kernel='rbf', C=0.001, gamma='scale')
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+    y_pred_train = model.predict(X_train)
+
+    # Seuil basé sur SNR standardisé
+    train_scaled_df = pd.DataFrame(X_train, columns=[f'{snr_column}_scaled'])
+    train_scaled_df['True Label'] = y_train
+    train_scaled_df['Predicted Label'] = y_pred_train
+
+    normal_scaled = train_scaled_df[train_scaled_df['Predicted Label'] == 'Normal'][f'{snr_column}_scaled']
+    mi_scaled = train_scaled_df[train_scaled_df['Predicted Label'] == 'MI'][f'{snr_column}_scaled']
+    
+    #Trouver un seuil dans les valeurs SNR qui sépare au mieux les deux classes.
+    if not normal_scaled.empty and not mi_scaled.empty:
+        seuil_scaled = (normal_scaled.min() + mi_scaled.max()) / 2
+    else:
+        seuil_scaled = 0.0
+
+    # Ajout dans snr_df (sur tout le dataset)
+    snr_df[f'Statut de bruit {label}'] = np.where(
+        snr_df[f'{snr_column}_scaled'] < seuil_scaled, "Bruit élevé", "Bruit faible"
+    )
+
+    # Évaluation
+    conf_matrix = confusion_matrix(y_test, y_pred)
+    accuracy = accuracy_score(y_test, y_pred)
+
+    print(f"\n--- {label} ---")
+    print(f"Seuil SNR (standardisé) : {seuil_scaled:.3f}")
+    print(f"Précision du modèle : {accuracy * 100:.2f}%")
+
+    plt.figure(figsize=(6, 5))
+    sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues',
+                xticklabels=['Normal', 'MI'], yticklabels=['Normal', 'MI'])
+    plt.title(f'Matrice de Confusion - ({label})')
+    plt.xlabel('Prédictions')
+    plt.ylabel('Véritables Étiquettes')
+    plt.show()
+
+    # Prédiction correcte basée sur bruit
+    snr_df[f'Prédiction correcte {label}'] = np.where(
+        ((snr_df[f'Statut de bruit {label}'] == "Bruit élevé") & (snr_df['Type'] == 'MI')) |
+        ((snr_df[f'Statut de bruit {label}'] == "Bruit faible") & (snr_df['Type'] == 'Normal')),
+        "Correct", "Incorrect"
+    )
+
+    print("\nVérification prédiction selon bruit :")
+    print(snr_df[['Type', f'{snr_column}_scaled', f'Statut de bruit {label}', f'Prédiction correcte {label}']].head())
+
+    print("\nRapport de classification :")
+    print(classification_report(y_test, y_pred))
+
+# --- Évaluations séparées FFT et AR ---
+evaluate_snr_model('SNR_FFT', 'FFT')
+evaluate_snr_model('SNR_AR', 'AR')
+
+# --- Comparaison globale ---
+print("\n--- Comparaison finale ---")
+print(f"SNR moyen (FFT) : {snr_df['SNR_FFT'].mean():.2f} dB")
+print(f"SNR moyen (AR)  : {snr_df['SNR_AR'].mean():.2f} dB")
+
+plt.figure(figsize=(8, 5))
+sns.boxplot(x='Type', y='SNR_FFT', data=snr_df)
+plt.title("Répartition du SNR (FFT) par type")
+plt.show()
+
+plt.figure(figsize=(8, 5))
+sns.boxplot(x='Type', y='SNR_AR', data=snr_df)
+plt.title("Répartition du SNR (AR) par type")
+plt.show()
