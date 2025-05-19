@@ -1,0 +1,40 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+file_path = r"PPG_Dataset.csv"
+df = pd.read_csv(file_path)
+
+print("\n Vérification des valeurs manquantes :")
+print(df.isnull().sum().sum(), "valeurs manquantes trouvées")
+
+print("\n Vérification des doublons :")
+print(df.duplicated().sum(), "lignes dupliquées trouvées")
+
+print("\n Répartition des classes :")
+print(df["Label"].value_counts())
+
+import numpy as np
+
+print("\n Vérification des valeurs aberrantes :")
+summary_stats = df.describe().T
+outliers = {}
+
+for col in df.columns[:-1]:
+    Q1 = df[col].quantile(0.25)
+    Q3 = df[col].quantile(0.75)
+    IQR = Q3 - Q1
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+    outlier_count = ((df[col] < lower_bound) | (df[col] > upper_bound)).sum()
+
+    if outlier_count > 0:
+        outliers[col] = outlier_count
+
+if outliers:
+    print(f"{len(outliers)} colonnes ont des valeurs aberrantes.")
+else:
+    print("Aucune valeur aberrante détectée.")
+
+print("\n Statistiques générales :")
+print(summary_stats.head())
