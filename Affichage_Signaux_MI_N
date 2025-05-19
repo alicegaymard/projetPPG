@@ -1,0 +1,42 @@
+"""
+Created on Tue Apr 29 10:45:49 2025
+
+@author: mariehoffmann
+"""
+
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn import preprocessing  
+
+file_path = "/Users/mariehoffmann/Desktop/Esme/Ingé2/Projet/PPG_Dataset.csv"
+df = pd.read_csv(file_path)
+
+normaux_sample = df[df['Label'] == 'Normal'].sample(n=10, random_state=42)
+mi_sample = df[df['Label'] == 'MI'].sample(n=10, random_state=42)
+
+def standardize_signal(signal):
+    return preprocessing.scale(signal)  
+
+for i in range(10):
+    signal = normaux_sample.iloc[i].drop('Label').to_numpy()
+    signal_standardized = standardize_signal(signal)
+    plt.figure(figsize=(10, 4))
+    plt.plot(signal_standardized)
+    plt.title(f"Signal Normal")
+    plt.xlabel("Échantillons")
+    plt.ylabel("Amplitude")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+for i in range(10):
+    signal = mi_sample.iloc[i].drop('Label').to_numpy()
+    signal_standardized = standardize_signal(signal)
+    plt.figure(figsize=(10, 4))
+    plt.plot(signal_standardized)
+    plt.title(f"Signal MI")
+    plt.xlabel("Échantillons")
+    plt.ylabel("Amplitude")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
