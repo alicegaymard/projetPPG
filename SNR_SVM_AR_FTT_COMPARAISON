@@ -130,10 +130,6 @@ def evaluate_snr_model(snr_column, label):
 evaluate_snr_model('SNR_FFT', 'FFT')
 evaluate_snr_model('SNR_AR', 'AR')
 
-# --- Comparaison globale ---
-print("\n--- Comparaison finale ---")
-print(f"SNR moyen (FFT) : {snr_df['SNR_FFT'].mean():.2f} dB")
-print(f"SNR moyen (AR)  : {snr_df['SNR_AR'].mean():.2f} dB")
 
 plt.figure(figsize=(8, 5))
 sns.boxplot(x='Type', y='SNR_FFT', data=snr_df)
