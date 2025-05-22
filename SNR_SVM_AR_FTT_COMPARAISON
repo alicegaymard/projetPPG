@@ -26,7 +26,7 @@ def calculate_snr_fft(signal):
     snr = 10 * np.log10(signal_power / noise_power) if noise_power != 0 else np.inf
     return snr
 
-def calculate_snr_ar(signal, lags=20):
+def calculate_snr_ar(signal, lags=10):
     try:
         model = AutoReg(signal, lags=lags)
         model_fitted = model.fit()
