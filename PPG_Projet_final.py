@@ -22,10 +22,10 @@ df.columns = df.columns.astype(str)
 
 
 example_signal = df.iloc[0, :-1].astype(float).values  
-label = df.iloc[0, -1]  
+label = df.iloc[0, -1]  # 'MI' or not
 
 # On fit un modèle d'auto régression d'ordre 10 
-p = 10
+p = 13
 model = AutoReg(example_signal, lags=p, old_names=False)
 model_fit = model.fit()
 predicted_signal = model_fit.predict(start=p, end=len(example_signal)-1)
@@ -73,7 +73,7 @@ plt.show()
 
 
 # Fonction pour extraire des features à partir du bruit entre signal réel et signal AR
-def extract_features(signal, p=10, use_ar_coeffs=True):
+def extract_features(signal, p=13, use_ar_coeffs=True):
     model = AutoReg(signal, lags=p, old_names=False)
     model_fit = model.fit()
     predicted = model_fit.predict(start=p, end=len(signal)-1)
@@ -90,6 +90,21 @@ def extract_features(signal, p=10, use_ar_coeffs=True):
         ent = entropy(np.histogram(noise, bins=30, density=True)[0] + 1e-6)
         return [energy, std_dev, skewness, ent]
 
+import pywt
+
+def extract_wavelet_features(signal, wavelet='db4', level=10):
+    coeffs = pywt.wavedec(signal, wavelet, level=level)
+    features = []
+    for c in coeffs:
+        features.extend([
+            np.mean(c),
+            np.std(c),
+            np.max(c),
+            np.min(c),
+            np.sum(np.square(c))  # énergie
+        ])
+    return features
+
 
 # Préparation des features et labels pour tout le dataset
 X = []
@@ -98,7 +113,7 @@ y = []
 for idx, row in df.iterrows():
     signal = row[:-1].astype(float).values
     label = 1 if row['Label'] == 'MI' else 0
-    features = extract_features(signal, p=10, use_ar_coeffs=True)  # <- True pour utiliser les coeffs AR
+    features = extract_features(signal, p=13, use_ar_coeffs=True)  # <- True pour utiliser les coeffs AR
     X.append(features)
     y.append(label)
 
@@ -117,12 +132,6 @@ X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, 
 # Définir les valeurs possibles de C à tester
 param_grid = {'C': [0.01, 0.1, 1, 10, 100],'gamma': ['scale', 'auto', 0.001, 0.01, 0.1, 1]}
 
-svm = SVC(kernel='rbf')
-grid = GridSearchCV(svm, param_grid, cv=5, scoring='accuracy')
-grid.fit(X_train, y_train)
-
-print("Meilleurs hyperparamètres :", grid.best_params_)
-
 # SVM + GridSearch
 svm = SVC(kernel='rbf', gamma='scale')
 grid = GridSearchCV(svm, param_grid, cv=5, scoring='accuracy')
@@ -130,6 +139,7 @@ grid.fit(X_train, y_train)
 
 # Meilleur modèle
 best_svm = grid.best_estimator_
+print("Meilleur C et gamma:", grid.best_params_)
 
 # Évaluation
 y_pred = best_svm.predict(X_test)
